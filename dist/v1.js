@@ -91,7 +91,7 @@ async function main() {
             res.send("NOAUTH");
           }
         } else {
-          res.send("NOAUTH");
+          res.send("NOUSER");
         }
       } else {
         res.send({ error: "ERR_BAD_CHARACTERS" });
