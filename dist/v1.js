@@ -111,7 +111,7 @@ async function main() {
       });
     } catch (error) {
       if (error.message === "Cannot read property 'username' of undefined") {
-        res.status(500).send({ error: "NOAUTH_ERR_POSSIBLE_SPOOF" });
+        res.send({ error: "NOAUTH_ERR_POSSIBLE_SPOOF" });
       } else {
         res.status(500).send({ error: "NOAUTH_UNKNOWN_ERROR" });
       }
