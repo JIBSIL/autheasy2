@@ -26,6 +26,8 @@ async function main() {
   await client.connect();
   const db = client.db(dbName);
   const collection = db.collection("dev");
+  const tokens = db.collection("tokens");
+
   // Character limit
   const RegExpFilter = /^.{3,64}$/;
   const RegExpFilterPassword = /^.{7,64}$/;
@@ -83,6 +85,11 @@ async function main() {
                 expiresIn: 86400
               }
             );
+            await tokens.insertOne({
+              username: req.body.username,
+              token,
+              isAdmin
+            });
             res
               .cookie("token", token, { httpOnly: true })
               .status(200)
@@ -91,7 +98,7 @@ async function main() {
             res.send("NOAUTH");
           }
         } else {
-          res.send("NOAUTH");
+          res.send("NOUSER");
         }
       } else {
         res.send({ error: "ERR_BAD_CHARACTERS" });
@@ -111,10 +118,121 @@ async function main() {
       });
     } catch (error) {
       if (error.message === "Cannot read property 'username' of undefined") {
-        res.status(500).send({ error: "NOAUTH_ERR_POSSIBLE_SPOOF" });
+        res.send({ error: "NOAUTH_ERR_POSSIBLE_SPOOF" });
       } else {
         res.status(500).send({ error: "NOAUTH_UNKNOWN_ERROR" });
       }
+    }
+  });
+
+  app.put("/updateuser", async (req, res) => {
+    try {
+      const findUser = await collection.findOne({
+        username: req.body.currentUsername
+      });
+      if (findUser) {
+        jwt.verify(req.cookies.token, jwtsecret, async (error, decoded) => {
+          const isValid = error || decoded === undefined ? false : true;
+          if (isValid === true) {
+            if (
+              decoded.username === req.body.currentUsername ||
+              decoded.isAdmin === true
+            ) {
+              if (!req.body.currentPassword) {
+                var comparePassword = false;
+              } else if (req.body.currentPassword) {
+                var comparePassword = await bcrypt.compare(
+                  req.body.currentPassword,
+                  findUser.password
+                );
+              }
+
+              if (comparePassword || decoded.isAdmin === true) {
+                if (
+                  RegExpFilter.test(req.body.username) &&
+                  RegExpFilterPassword.test(req.body.password) === true
+                ) {
+                  const newUsername =
+                    req.body.username ?? req.body.currentUsername;
+                  const newPassword =
+                    req.body.password ?? req.body.currentPassword;
+                  const hash = bcrypt.hashSync(
+                    newPassword,
+                    bcrypt.genSaltSync(10)
+                  );
+                  await collection.updateOne(
+                    { username: req.body.currentUsername },
+                    {
+                      $set: {
+                        username: newUsername,
+                        password: hash
+                      }
+                    }
+                  );
+                  res.send("Updated");
+                } else {
+                  res.send("ERR_BAD_CHARACTERS");
+                }
+              }
+            } else {
+              res.send("ERR_UNAUTHORIZED");
+            }
+          } else {
+            res.send("NOAUTH_ERR_POSSIBLE_SPOOF");
+          }
+        });
+      } else {
+        res.send("NOUSER");
+      }
+    } catch (error) {
+      res.status(500).send({ error: "NOAUTH_UNKNOWN_ERR" });
+    }
+  });
+
+  app.delete("/deleteuser", async (req, res) => {
+    try {
+      if (
+        RegExpFilter.test(req.body.username) &&
+        RegExpFilterPassword.test(req.body.password) === true
+      ) {
+        const findUser = await collection.findOne({
+          username: req.body.username
+        });
+        if (findUser) {
+          jwt.verify(req.cookies.token, jwtsecret, async (error, decoded) => {
+            const isValid = error || decoded === undefined ? false : true;
+            if (isValid === true) {
+              if (
+                decoded.username === req.body.username ||
+                decoded.isAdmin === true
+              ) {
+                if (!req.body.password) {
+                  var comparePasswordForDeletion = false;
+                } else if (req.body.password) {
+                  var comparePasswordForDeletion = await bcrypt.compare(
+                    req.body.password,
+                    findUser.password
+                  );
+                }
+                if (comparePasswordForDeletion || decoded.isAdmin === true) {
+                  await collection.deleteOne({ username: req.body.username });
+                  res.send("User Deleted");
+                }
+              } else {
+                res.send("ERR_UNAUTHORIZED");
+              }
+            } else {
+              res.send("NOAUTH_ERR_POSSIBLE_SPOOF");
+            }
+          });
+        } else {
+          res.send("NOUSER");
+        }
+      } else {
+        res.send("ERR_BAD_CHARACTERS");
+      }
+    } catch (error) {
+      res.status(500).send({ error: "NOAUTH_UNKNOWN_ERR" });
     }
   });
 
